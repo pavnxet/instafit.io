@@ -395,20 +395,26 @@
         workspaceGrid.addEventListener(eventName, () => workspaceGrid.classList.remove('drag-over'), false);
     });
 
+    // FIX: Appending dropped files to existing queue
     workspaceGrid.addEventListener('drop', (e) => {
         const dt = e.dataTransfer;
         const files = Array.from(dt.files).filter(file => file.type.startsWith('image/'));
         if (files.length > 0) {
-            processingQueue = files;
+            processingQueue = [...processingQueue, ...files];
             refreshWorkspace();
         }
     });
 
     aspectProfileSelector.addEventListener('change', syncInterfaceMetrics);
     bgProfileSelector.addEventListener('change', refreshWorkspace);
+    
+    // FIX: Appending manually imported files to existing queue
     imageLoader.addEventListener('change', (e) => {
-        processingQueue = Array.from(e.target.files);
-        refreshWorkspace();
+        const newFiles = Array.from(e.target.files);
+        if (newFiles.length > 0) {
+            processingQueue = [...processingQueue, ...newFiles];
+            refreshWorkspace();
+        }
     });
 
     function refreshWorkspace() {

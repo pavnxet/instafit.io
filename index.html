@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>instafit.io // Image Canvas Fitter & Processor</title>
+    <style>
+        :root {
+            --bg-workspace: #000000;
+            --bg-surface: #0a0a0a;
+            --border-primary: #ffffff;
+            --border-secondary: #222222;
+            --text-primary: #ffffff;
+            --text-secondary: #888888;
+            --font-mono: "SF Mono", Monaco, Consolas, "Liberation Mono", Courier, monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-mono);
+            background-color: var(--bg-workspace);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            letter-spacing: -0.02em;
+        }
+
+        header {
+            width: 100%;
+            background-color: var(--bg-surface);
+            border-bottom: 1px solid var(--border-secondary);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .brand-group h1 {
+            font-size: 0.85rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .brand-group p {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .control-strip {
+            background-color: var(--bg-surface);
+            border-bottom: 1px solid var(--border-secondary);
+            padding: 0.75rem 2rem;
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .control-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+        }
+
+        .interactive-action {
+            position: relative;
+            background: transparent;
+            color: var(--text-primary);
+            border: 1px solid var(--border-primary);
+            padding: 0.4rem 0.9rem;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background 0.15s ease, color 0.15s ease;
+        }
+
+        .interactive-action:hover {
+            background: var(--border-primary);
+            color: var(--bg-workspace);
+        }
+
+        .interactive-action input[type="file"] {
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+
+        select.interface-select {
+            background: var(--bg-workspace);
+            color: var(--text-primary);
+            border: 1px solid var(--border-secondary);
+            padding: 0.4rem 0.75rem;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            outline: none;
+            border-radius: 0;
+        }
+
+        select.interface-select:focus {
+            border-color: var(--border-primary);
+        }
+
+        main {
+            flex: 1;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .workspace-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1.5rem;
+            min-height: 400px;
+            border: 1px transparent solid;
+            transition: border-color 0.2s ease, background-color 0.2s ease;
+        }
+
+        .workspace-grid.drag-over {
+            border: 1px dashed var(--border-primary);
+            background-color: rgba(255, 255, 255, 0.02);
+        }
+
+        .image-node {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-secondary);
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .frame-canvas-bounds {
+            width: 100%;
+            aspect-ratio: var(--target-aspect, 1/1);
+            background-color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            border: 1px solid var(--border-secondary);
+            position: relative;
+        }
+
+        .frame-canvas-bounds .blur-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            filter: blur(20px);
+            transform: scale(1.1);
+            opacity: 1;
+            z-index: 1;
+            display: none;
+        }
+
+        .frame-canvas-bounds img.main-img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            display: block;
+            position: relative;
+            z-index: 2;
+        }
+
+        .node-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .node-title {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .action-row {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .secondary-action {
+            background: transparent;
+            color: var(--text-primary);
+            border: 1px solid var(--border-secondary);
+            padding: 0.3rem 0.6rem;
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            cursor: pointer;
+            width: 100%;
+            text-align: center;
+        }
+
+        .secondary-action:hover {
+            border-color: var(--border-primary);
+        }
+
+        .null-state {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 6rem 2rem;
+            border: 1px dashed var(--border-secondary);
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            pointer-events: none;
+        }
+
+        .preview-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+        }
+
+        .preview-content {
+            position: relative;
+            max-width: 90%;
+            max-height: 90%;
+            border: 1px solid var(--border-secondary);
+            box-shadow: 0 0 30px rgba(255, 255, 255, 0.1);
+        }
+
+        .preview-container-wrapper {
+            width: 500px;
+            max-width: 100%;
+        }
+
+        .preview-close {
+            position: absolute;
+            top: -2.5rem;
+            right: 0;
+            background: transparent;
+            color: var(--text-primary);
+            border: none;
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            cursor: pointer;
+        }
+
+        /* Bottom Center Watermark Element */
+        footer {
+            width: 100%;
+            padding: 1.5rem 2rem;
+            background-color: var(--bg-workspace);
+            border-top: 1px solid var(--border-secondary);
+            text-align: center;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+        }
+
+        footer a {
+            color: var(--text-primary);
+            text-decoration: none;
+            border-bottom: 1px solid var(--text-secondary);
+            transition: border-color 0.15s ease;
+        }
+
+        footer a:hover {
+            border-color: var(--border-primary);
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="brand-group">
+            <h1>instafit.io</h1>
+            <p>Aspect Ratio Frame Alignment & Normalization Utility</p>
+        </div>
+    </header>
+
+    <div class="control-strip">
+        <div class="control-group">
+            <span class="control-label">Source:</span>
+            <div class="interactive-action">
+                Import Images
+                <input type="file" id="imageLoader" accept="image/*" multiple>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <span class="control-label">Target Aspect Profile:</span>
+            <select id="aspectProfileSelector" class="interface-select">
+                <option value="1/1">1:1 Square Format</option>
+                <option value="4/5">4:5 Vertical Aspect</option>
+                <option value="16/9">16:9 Widescreen Landscape</option>
+                <option value="9/16">9:16 Vertical Story</option>
+                <option value="4/3">4:3 Legacy Standard</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <span class="control-label">Background Ground:</span>
+            <select id="bgProfileSelector" class="interface-select">
+                <option value="solid-white">Solid White</option>
+                <option value="dynamic-blur">Dynamic Blur</option>
+            </select>
+        </div>
+
+        <button class="interactive-action" id="bulkExportAction" style="display: none; margin-left: auto;">Batch Export Processed Images</button>
+    </div>
+
+    <main>
+        <div class="workspace-grid" id="workspaceGrid">
+            <div class="null-state">
+                System Idle. Drop images here or use the import action to load pipeline.
+            </div>
+        </div>
+    </main>
+
+    <div class="preview-modal" id="previewModal">
+        <div class="preview-content">
+            <button class="preview-close" id="closePreview">Close [ESC]</button>
+            <div class="preview-container-wrapper">
+                <div id="previewContainer" class="frame-canvas-bounds"></div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        made with ♥️ by <a href="https://github.com/pavnxet" target="_blank" rel="noopener noreferrer">Pavnxet</a> ✨
+    </footer>
+
+<script>
+    const imageLoader = document.getElementById('imageLoader');
+    const aspectProfileSelector = document.getElementById('aspectProfileSelector');
+    const bgProfileSelector = document.getElementById('bgProfileSelector');
+    const workspaceGrid = document.getElementById('workspaceGrid');
+    const bulkExportAction = document.getElementById('bulkExportAction');
+    const previewModal = document.getElementById('previewModal');
+    const previewContainer = document.getElementById('previewContainer');
+    const closePreview = document.getElementById('closePreview');
+
+    let processingQueue = [];
+
+    function syncInterfaceMetrics() {
+        document.documentElement.style.setProperty('--target-aspect', aspectProfileSelector.value);
+        refreshWorkspace();
+    }
+
+    function generateTimestampName() {
+        const now = new Date();
+        const pad = (num) => String(num).padStart(2, '0');
+        return `IMG_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    }
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        workspaceGrid.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        workspaceGrid.addEventListener(eventName, () => workspaceGrid.classList.add('drag-over'), false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        workspaceGrid.addEventListener(eventName, () => workspaceGrid.classList.remove('drag-over'), false);
+    });
+
+    workspaceGrid.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        const files = Array.from(dt.files).filter(file => file.type.startsWith('image/'));
+        if (files.length > 0) {
+            processingQueue = files;
+            refreshWorkspace();
+        }
+    });
+
+    aspectProfileSelector.addEventListener('change', syncInterfaceMetrics);
+    bgProfileSelector.addEventListener('change', refreshWorkspace);
+    imageLoader.addEventListener('change', (e) => {
+        processingQueue = Array.from(e.target.files);
+        refreshWorkspace();
+    });
+
+    function refreshWorkspace() {
+        if (processingQueue.length === 0) {
+            workspaceGrid.innerHTML = '<div class="null-state">System Idle. Drop images here or use the import action to load pipeline.</div>';
+            bulkExportAction.style.display = 'none';
+            return;
+        }
+
+        workspaceGrid.innerHTML = '';
+        bulkExportAction.style.display = 'block';
+
+        const [ratioW, ratioH] = aspectProfileSelector.value.split('/').map(Number);
+        const bgStyle = bgProfileSelector.value;
+
+        processingQueue.forEach((file) => {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const imageNode = document.createElement('div');
+                imageNode.className = 'image-node';
+
+                const frameCanvasBounds = document.createElement('div');
+                frameCanvasBounds.className = 'frame-canvas-bounds';
+
+                const blurBg = document.createElement('img');
+                blurBg.className = 'blur-bg';
+                blurBg.src = event.target.result;
+                if (bgStyle === 'dynamic-blur') blurBg.style.display = 'block';
+
+                const targetImg = document.createElement('img');
+                targetImg.className = 'main-img';
+                targetImg.src = event.target.result;
+
+                frameCanvasBounds.appendChild(blurBg);
+                frameCanvasBounds.appendChild(targetImg);
+
+                const nodeMeta = document.createElement('div');
+                nodeMeta.className = 'node-meta';
+
+                const nodeTitle = document.createElement('div');
+                nodeTitle.className = 'node-title';
+                nodeTitle.textContent = `FILE: ${file.name}`;
+
+                const actionRow = document.createElement('div');
+                actionRow.className = 'action-row';
+
+                const previewBtn = document.createElement('button');
+                previewBtn.className = 'secondary-action';
+                previewBtn.textContent = 'Preview';
+                previewBtn.onclick = () => launchPreviewModal(event.target.result, bgStyle);
+
+                const exportBtn = document.createElement('button');
+                exportBtn.className = 'secondary-action';
+                exportBtn.textContent = 'Export';
+                exportBtn.onclick = () => executeRenderPipeline(event.target.result, ratioW, ratioH, bgStyle);
+
+                actionRow.appendChild(previewBtn);
+                actionRow.appendChild(exportBtn);
+
+                nodeMeta.appendChild(nodeTitle);
+                nodeMeta.appendChild(actionRow);
+
+                imageNode.appendChild(frameCanvasBounds);
+                imageNode.appendChild(nodeMeta);
+                workspaceGrid.appendChild(imageNode);
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    function launchPreviewModal(imageSrc, bgStyle) {
+        previewContainer.innerHTML = '';
+        
+        const blurBg = document.createElement('img');
+        blurBg.className = 'blur-bg';
+        blurBg.src = imageSrc;
+        if (bgStyle === 'dynamic-blur') blurBg.style.display = 'block';
+
+        const previewImg = document.createElement('img');
+        previewImg.className = 'main-img';
+        previewImg.src = imageSrc;
+
+        previewContainer.appendChild(blurBg);
+        previewContainer.appendChild(previewImg);
+        previewModal.style.display = 'flex';
+    }
+
+    function hidePreviewModal() {
+        previewModal.style.display = 'none';
+    }
+
+    closePreview.addEventListener('click', hidePreviewModal);
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') hidePreviewModal();
+    });
+
+    function executeRenderPipeline(imageSrc, ratioW, ratioH, bgStyle) {
+        const sourceImg = new Image();
+        sourceImg.src = imageSrc;
+        sourceImg.onload = function() {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+
+            const referenceDimension = Math.max(sourceImg.width, sourceImg.height, 1440);
+            
+            if (ratioW >= ratioH) {
+                canvas.width = referenceDimension;
+                canvas.height = referenceDimension * (ratioH / ratioW);
+            } else {
+                canvas.height = referenceDimension;
+                canvas.width = referenceDimension * (ratioW / ratioH);
+            }
+
+            if (bgStyle === 'dynamic-blur') {
+                ctx.save();
+                const scaleBgX = canvas.width / sourceImg.width;
+                const scaleBgY = canvas.height / sourceImg.height;
+                const scaleBg = Math.max(scaleBgX, scaleBgY) * 1.1;
+                
+                const bgW = sourceImg.width * scaleBg;
+                const bgH = sourceImg.height * scaleBg;
+                const bgX = (canvas.width - bgW) / 2;
+                const bgY = (canvas.height - bgH) / 2;
+                
+                ctx.drawImage(sourceImg, bgX, bgY, bgW, bgH);
+                
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.filter = 'blur(30px)';
+                ctx.drawImage(canvas, 0, 0);
+                ctx.restore();
+            } else {
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+
+            const scale = Math.min(canvas.width / sourceImg.width, canvas.height / sourceImg.height);
+            const xOffset = (canvas.width - sourceImg.width * scale) / 2;
+            const yOffset = (canvas.height - sourceImg.height * scale) / 2;
+
+            ctx.filter = 'none';
+            ctx.drawImage(sourceImg, xOffset, yOffset, sourceImg.width * scale, sourceImg.height * scale);
+
+            const link = document.createElement('a');
+            link.download = `${generateTimestampName()}_normalized.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        };
+    }
+
+    bulkExportAction.onclick = () => {
+        const actionTriggers = workspaceGrid.querySelectorAll('.action-row button:nth-child(2)');
+        actionTriggers.forEach((btn, index) => {
+            setTimeout(() => {
+                btn.click();
+            }, index * 250);
+        });
+    };
+
+    syncInterfaceMetrics();
+</script>
+</body>
+</html>
